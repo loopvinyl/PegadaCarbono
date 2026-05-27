@@ -64,34 +64,69 @@ def inicializar_cotacoes():
     if 'cotacao_atualizada' not in st.session_state:
         st.session_state.cotacao_atualizada = False
 
-# Inicializa cotações
-inicializar_cotacoes()
-
 # ============================================
-# FUNÇÕES DE CÁLCULO DA PEGADA
+# PARÂMETROS AVANÇADOS (EDITÁVEIS PELO USUÁRIO)
 # ============================================
 
-def calcular_pegada_gas(m3_gas):
-    """Retorna (total_tco2e, detalhes_dict) para gás natural (combustão estacionária)."""
-    pci = 0.0000386          # TJ/m³
+def inicializar_parametros_avancados():
+    """Define os valores padrão (IPCC/referência) e permite que o usuário os altere via session_state."""
+    if 'parametros' not in st.session_state:
+        st.session_state.parametros = {
+            # Diesel
+            'densidade_diesel': 0.84,          # kg/L
+            'pci_diesel': 0.043,               # TJ/t
+            'fe_co2_diesel': 74.1,             # t CO₂/TJ
+            'fe_ch4_diesel': 0.0039,           # t CH₄/TJ
+            'fe_n2o_diesel': 0.0039,           # t N₂O/TJ
+
+            # Gás natural
+            'pci_gas': 0.0000386,              # TJ/m³
+            'fe_co2_gas': 56.1,                # t CO₂/TJ
+            'fe_ch4_gas': 0.005,               # t CH₄/TJ
+            'fe_n2o_gas': 0.0001,              # t N₂O/TJ
+
+            # GWPs (AR6 20 anos)
+            'gwp_ch4': 82.5,
+            'gwp_n2o': 273
+        }
+
+def resetar_parametros():
+    """Restaura os valores padrão."""
+    st.session_state.parametros = {
+        'densidade_diesel': 0.84,
+        'pci_diesel': 0.043,
+        'fe_co2_diesel': 74.1,
+        'fe_ch4_diesel': 0.0039,
+        'fe_n2o_diesel': 0.0039,
+        'pci_gas': 0.0000386,
+        'fe_co2_gas': 56.1,
+        'fe_ch4_gas': 0.005,
+        'fe_n2o_gas': 0.0001,
+        'gwp_ch4': 82.5,
+        'gwp_n2o': 273
+    }
+
+# ============================================
+# FUNÇÕES DE CÁLCULO DA PEGADA (USANDO PARÂMETROS AVANÇADOS)
+# ============================================
+
+def calcular_pegada_gas(m3_gas, params):
+    """Retorna (total_tco2e, detalhes_dict) para gás natural."""
+    pci = params['pci_gas']
     consumo_tj = m3_gas * pci
 
-    # Fatores de emissão (t/TJ) – Tabela 2.4 IPCC
-    fe_co2 = 56.1    # t CO₂/TJ
-    fe_ch4 = 0.005   # t CH₄/TJ
-    fe_n2o = 0.0001  # t N₂O/TJ
+    fe_co2 = params['fe_co2_gas']
+    fe_ch4 = params['fe_ch4_gas']
+    fe_n2o = params['fe_n2o_gas']
 
-    # Massa emitida (t)
     m_co2 = consumo_tj * fe_co2
     m_ch4 = consumo_tj * fe_ch4
     m_n2o = consumo_tj * fe_n2o
 
-    # GWP AR6 (20 anos)
-    gwp_co2 = 1
-    gwp_ch4 = 82.5
-    gwp_n2o = 273
+    gwp_ch4 = params['gwp_ch4']
+    gwp_n2o = params['gwp_n2o']
 
-    co2e_co2 = m_co2 * gwp_co2
+    co2e_co2 = m_co2 * 1
     co2e_ch4 = m_ch4 * gwp_ch4
     co2e_n2o = m_n2o * gwp_n2o
 
@@ -110,29 +145,27 @@ def calcular_pegada_gas(m3_gas):
     }
     return total, detalhes
 
-def calcular_pegada_diesel(litros_diesel):
-    """Retorna (total_tco2e, detalhes_dict) para diesel S10 (combustão móvel)."""
-    densidade = 0.84          # kg/L
+def calcular_pegada_diesel(litros_diesel, params):
+    """Retorna (total_tco2e, detalhes_dict) para diesel S10."""
+    densidade = params['densidade_diesel']
     massa_kg = litros_diesel * densidade
     massa_t = massa_kg / 1000
 
-    pci = 0.043               # TJ/t
+    pci = params['pci_diesel']
     consumo_tj = massa_t * pci
 
-    # Fatores de emissão (t/TJ) – Tabelas 3.2.1 e 3.2.2 (Mobile Combustion)
-    fe_co2 = 74.1    # t CO₂/TJ
-    fe_ch4 = 0.0039  # t CH₄/TJ
-    fe_n2o = 0.0039  # t N₂O/TJ
+    fe_co2 = params['fe_co2_diesel']
+    fe_ch4 = params['fe_ch4_diesel']
+    fe_n2o = params['fe_n2o_diesel']
 
     m_co2 = consumo_tj * fe_co2
     m_ch4 = consumo_tj * fe_ch4
     m_n2o = consumo_tj * fe_n2o
 
-    gwp_co2 = 1
-    gwp_ch4 = 82.5
-    gwp_n2o = 273
+    gwp_ch4 = params['gwp_ch4']
+    gwp_n2o = params['gwp_n2o']
 
-    co2e_co2 = m_co2 * gwp_co2
+    co2e_co2 = m_co2 * 1
     co2e_ch4 = m_ch4 * gwp_ch4
     co2e_n2o = m_n2o * gwp_n2o
 
@@ -160,7 +193,14 @@ def formatar_br(numero):
     return f"{numero:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # ============================================
-# BARRA LATERAL COM COTAÇÕES EM TEMPO REAL
+# INICIALIZAÇÕES (COTAÇÕES + PARÂMETROS)
+# ============================================
+
+inicializar_cotacoes()
+inicializar_parametros_avancados()
+
+# ============================================
+# BARRA LATERAL COM COTAÇÕES E PARÂMETROS AVANÇADOS
 # ============================================
 
 with st.sidebar:
@@ -208,6 +248,36 @@ with st.sidebar:
         - Em caso de falha, são usados valores de referência (€85,50 e R$5,50).
         """)
 
+    # ============================================
+    # PARÂMETROS AVANÇADOS (EDITÁVEIS)
+    # ============================================
+    with st.expander("⚙️ Parâmetros avançados (opcional)"):
+        st.markdown("Ajuste os valores caso possua dados mais precisos (laudo do fornecedor, fatura de gás, etc.).")
+        params = st.session_state.parametros
+
+        st.subheader("Diesel S10")
+        params['densidade_diesel'] = st.number_input("Densidade (kg/L)", value=params['densidade_diesel'], step=0.01, format="%.3f")
+        params['pci_diesel'] = st.number_input("PCI diesel (TJ/t)", value=params['pci_diesel'], step=0.001, format="%.5f")
+        params['fe_co2_diesel'] = st.number_input("FE CO₂ diesel (t/TJ)", value=params['fe_co2_diesel'], step=0.1)
+        params['fe_ch4_diesel'] = st.number_input("FE CH₄ diesel (t/TJ)", value=params['fe_ch4_diesel'], step=0.0001, format="%.5f")
+        params['fe_n2o_diesel'] = st.number_input("FE N₂O diesel (t/TJ)", value=params['fe_n2o_diesel'], step=0.0001, format="%.5f")
+
+        st.subheader("Gás Natural")
+        params['pci_gas'] = st.number_input("PCI gás natural (TJ/m³)", value=params['pci_gas'], step=1e-7, format="%.8f")
+        params['fe_co2_gas'] = st.number_input("FE CO₂ gás (t/TJ)", value=params['fe_co2_gas'], step=0.1)
+        params['fe_ch4_gas'] = st.number_input("FE CH₄ gás (t/TJ)", value=params['fe_ch4_gas'], step=0.0001, format="%.5f")
+        params['fe_n2o_gas'] = st.number_input("FE N₂O gás (t/TJ)", value=params['fe_n2o_gas'], step=0.00001, format="%.6f")
+
+        st.subheader("GWPs (Potencial de Aquecimento Global)")
+        params['gwp_ch4'] = st.number_input("GWP CH₄ (horizonte 20 anos)", value=params['gwp_ch4'], step=1.0)
+        params['gwp_n2o'] = st.number_input("GWP N₂O (horizonte 20 anos)", value=params['gwp_n2o'], step=1.0)
+
+        if st.button("🔄 Restaurar valores padrão"):
+            resetar_parametros()
+            st.rerun()
+
+        st.caption("Valores padrão: IPCC AR6 para GWPs; fatores de emissão IPCC 2006; densidade e PCI de referência.")
+
 # ============================================
 # TÍTULO PRINCIPAL
 # ============================================
@@ -230,10 +300,9 @@ with tab1:
     m3 = st.number_input("Consumo de gás natural (m³)", min_value=0.0, value=50000.0, step=1000.0, format="%.0f", key="gas")
     if st.button("Calcular pegada (gás)", key="btn_gas"):
         if m3 > 0:
-            total, detalhes = calcular_pegada_gas(m3)
+            total, detalhes = calcular_pegada_gas(m3, st.session_state.parametros)
             st.success(f"🌿 Pegada de carbono total: **{formatar_br(total)} tCO₂e**")
             with st.expander("📊 Ver detalhes do cálculo"):
-                # Converte os números para formato brasileiro
                 detalhes_formatados = {k: formatar_br(v) if isinstance(v, (int, float)) else v for k, v in detalhes.items()}
                 st.json(detalhes_formatados)
             # Custo de neutralização com cotações em tempo real
@@ -253,7 +322,7 @@ with tab2:
     litros = st.number_input("Consumo de diesel S10 (litros)", min_value=0.0, value=30000.0, step=1000.0, format="%.0f", key="diesel")
     if st.button("Calcular pegada (diesel)", key="btn_diesel"):
         if litros > 0:
-            total, detalhes = calcular_pegada_diesel(litros)
+            total, detalhes = calcular_pegada_diesel(litros, st.session_state.parametros)
             st.success(f"🌿 Pegada de carbono total: **{formatar_br(total)} tCO₂e**")
             with st.expander("📊 Ver detalhes do cálculo"):
                 detalhes_formatados = {k: formatar_br(v) if isinstance(v, (int, float)) else v for k, v in detalhes.items()}
@@ -268,4 +337,4 @@ with tab2:
             st.warning("Digite um consumo válido.")
 
 st.markdown("---")
-st.caption("Nota: Os fatores de emissão e GWP (20 anos) seguem o IPCC AR6 (2021) e as diretrizes IPCC 2006. As cotações são obtidas em tempo real via Yahoo Finance (CO2.L) e APIs de câmbio.")
+st.caption("Nota: Os fatores de emissão e GWP (20 anos) seguem o IPCC AR6 (2021) e as diretrizes IPCC 2006, a menos que alterados nos parâmetros avançados. As cotações são obtidas em tempo real via Yahoo Finance (CO2.L) e APIs de câmbio.")
