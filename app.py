@@ -1,3 +1,31 @@
+# =============================================================================
+# Calculadora de Pegada de Carbono
+# =============================================================================
+# Autor: [Seu Nome]
+# Versão: 1.0
+# Data: 2026-05-27
+# Licença: Todos os direitos reservados (ou outra de sua escolha)
+# Descrição:
+#   Calcula emissões de CO₂ equivalente (tCO₂e) a partir do consumo de gás natural
+#   (combustão estacionária) e diesel S10 (transporte rodoviário), usando fatores
+#   de emissão padrão do IPCC 2006 e GWPs do IPCC AR6 (2021). Inclui preço do
+#   carbono em tempo real (EU ETS) e conversão para Reais via API de câmbio.
+#   Parâmetros avançados (expansível na barra lateral) permitem ajustes conforme
+#   dados específicos do fornecedor (densidade, PCI, fatores de emissão, GWPs).
+#
+# Referências técnicas:
+#   - IPCC 2006 Guidelines for National Greenhouse Gas Inventories, Volume 2 (Energy):
+#       * Capítulo 1 (Introdução): Tabela 1.2 (NCV), Tabela 1.4 (CO₂)
+#       * Capítulo 2 (Combustão Estacionária): Tabelas 2.4 e 2.5 (CH₄ e N₂O)
+#       * Capítulo 3 (Combustão Móvel): Tabelas 3.2.1 (CO₂) e 3.2.2 (CH₄ e N₂O)
+#   - IPCC AR6 (2021) Climate Change: Tabela 7.15 (GWPs para horizonte de 20 anos:
+#       CH₄ = 82,5; N₂O = 273)
+#
+# As cotações de carbono (CO2.L) são obtidas via Yahoo Finance; as cotações do euro
+# são obtidas via AwesomeAPI (fallback ExchangeRate-API). Em caso de falha, valores
+# de referência (€85,50 e R$5,50) são utilizados.
+# =============================================================================
+
 import streamlit as st
 import requests
 import yfinance as yf
@@ -16,13 +44,13 @@ st.set_page_config(
 # ============================================
 
 def obter_cotacao_carbono():
-    """Obtém a cotação do carbono via Yahoo Finance (ticker CO2.L)."""
+    """Obtém a cotação do carbono via Yahoo Finance (ticker CO2.L) – EU ETS futures."""
     try:
         ticker = yf.Ticker("CO2.L")
         data = ticker.history(period="1d")
         if not data.empty:
             preco = data['Close'].iloc[-1]
-            # Validação básica: preço entre 10 e 200 euros
+            # Validação básica: preço entre 10 e 200 euros (evita outliers)
             if 10 < preco < 200:
                 return preco, "€", "Carbon Futures (CO2.L)", True, "Yahoo Finance (CO2.L)"
         return 85.50, "€", "Carbon Emissions (Referência)", False, "Referência"
@@ -30,7 +58,7 @@ def obter_cotacao_carbono():
         return 85.50, "€", "Carbon Emissions (Referência)", False, "Referência"
 
 def obter_cotacao_euro_real():
-    """Obtém a cotação EUR/BRL usando API AwesomeAPI ou fallback."""
+    """Obtém a cotação EUR/BRL usando API AwesomeAPI ou fallback ExchangeRate-API."""
     try:
         url = "https://economia.awesomeapi.com.br/last/EUR-BRL"
         response = requests.get(url, timeout=10)
@@ -50,7 +78,7 @@ def obter_cotacao_euro_real():
     return 5.50, "R$", False, "Referência"
 
 def inicializar_cotacoes():
-    """Inicializa as variáveis de cotação no session_state."""
+    """Inicializa as variáveis de cotação no session_state (persistência entre interações)."""
     if 'preco_carbono' not in st.session_state:
         preco, moeda, nome, ok, fonte = obter_cotacao_carbono()
         st.session_state.preco_carbono = preco
@@ -69,29 +97,32 @@ def inicializar_cotacoes():
 # ============================================
 
 def inicializar_parametros_avancados():
-    """Define os valores padrão (IPCC/referência) e permite que o usuário os altere via session_state."""
+    """
+    Define os valores padrão (IPCC/referência) para parâmetros técnicos.
+    O usuário pode alterá‑los na seção "Parâmetros avançados" (sidebar).
+    """
     if 'parametros' not in st.session_state:
         st.session_state.parametros = {
-            # Diesel
-            'densidade_diesel': 0.84,          # kg/L
-            'pci_diesel': 0.043,               # TJ/t
-            'fe_co2_diesel': 74.1,             # t CO₂/TJ
-            'fe_ch4_diesel': 0.0039,           # t CH₄/TJ
-            'fe_n2o_diesel': 0.0039,           # t N₂O/TJ
+            # Diesel S10 (transporte rodoviário)
+            'densidade_diesel': 0.84,          # kg/L (valor de referência – não IPCC)
+            'pci_diesel': 0.043,               # TJ/t (IPCC 2006 Cap.1 Tabela 1.2)
+            'fe_co2_diesel': 74.1,             # t CO₂/TJ (IPCC 2006 Cap.3 Tabela 3.2.1)
+            'fe_ch4_diesel': 0.0039,           # t CH₄/TJ (IPCC 2006 Cap.3 Tabela 3.2.2)
+            'fe_n2o_diesel': 0.0039,           # t N₂O/TJ (IPCC 2006 Cap.3 Tabela 3.2.2)
 
-            # Gás natural
-            'pci_gas': 0.0000386,              # TJ/m³
-            'fe_co2_gas': 56.1,                # t CO₂/TJ
-            'fe_ch4_gas': 0.005,               # t CH₄/TJ
-            'fe_n2o_gas': 0.0001,              # t N₂O/TJ
+            # Gás natural (combustão estacionária)
+            'pci_gas': 0.0000386,              # TJ/m³ (valor típico – convertido do NCV 48 TJ/Gg)
+            'fe_co2_gas': 56.1,                # t CO₂/TJ (IPCC 2006 Cap.2 Tabelas 2.4/2.5)
+            'fe_ch4_gas': 0.005,               # t CH₄/TJ (IPCC 2006 Cap.2 Tabelas 2.4/2.5)
+            'fe_n2o_gas': 0.0001,              # t N₂O/TJ (IPCC 2006 Cap.2 Tabelas 2.4/2.5)
 
-            # GWPs (AR6 20 anos)
+            # GWPs (IPCC AR6 2021 – horizonte de 20 anos, Tabela 7.15)
             'gwp_ch4': 82.5,
-            'gwp_n2o': 273.0   # <--- corrigido: float para evitar erro de tipo misto
+            'gwp_n2o': 273.0                   # Usado como float para evitar erro de tipo misto
         }
 
 def resetar_parametros():
-    """Restaura os valores padrão."""
+    """Restaura todos os parâmetros avançados para os valores padrão (IPCC/referência)."""
     st.session_state.parametros = {
         'densidade_diesel': 0.84,
         'pci_diesel': 0.043,
@@ -103,7 +134,7 @@ def resetar_parametros():
         'fe_ch4_gas': 0.005,
         'fe_n2o_gas': 0.0001,
         'gwp_ch4': 82.5,
-        'gwp_n2o': 273.0      # <--- corrigido
+        'gwp_n2o': 273.0
     }
 
 # ============================================
@@ -111,7 +142,28 @@ def resetar_parametros():
 # ============================================
 
 def calcular_pegada_gas(m3_gas, params):
-    """Retorna (total_tco2e, detalhes_dict) para gás natural."""
+    """
+    Calcula a pegada de carbono (tCO₂e) para gás natural estacionário.
+
+    Parâmetros:
+        m3_gas (float): Consumo em metros cúbicos (m³) – extraído da nota fiscal.
+        params (dict): Dicionário com parâmetros avançados (PCI, fatores de emissão, GWPs).
+
+    Retorna:
+        tuple: (total_tco2e, detalhes_dict)
+               total_tco2e – emissão total em toneladas de CO₂ equivalente.
+               detalhes_dict – dicionário com valores intermediários do cálculo.
+
+    Fatores padrão (IPCC 2006 Cap.2 Tabelas 2.4 e 2.5):
+        - PCI gás: 0,0000386 TJ/m³ (valor típico – não IPCC direto)
+        - CO₂: 56,1 t/TJ
+        - CH₄: 0,005 t/TJ
+        - N₂O: 0,0001 t/TJ
+
+    GWPs (IPCC AR6 2021 Tabela 7.15 – horizonte 20 anos):
+        - CH₄: 82,5
+        - N₂O: 273
+    """
     pci = params['pci_gas']
     consumo_tj = m3_gas * pci
 
@@ -146,7 +198,25 @@ def calcular_pegada_gas(m3_gas, params):
     return total, detalhes
 
 def calcular_pegada_diesel(litros_diesel, params):
-    """Retorna (total_tco2e, detalhes_dict) para diesel S10."""
+    """
+    Calcula a pegada de carbono (tCO₂e) para diesel S10 (transporte rodoviário).
+
+    Parâmetros:
+        litros_diesel (float): Consumo em litros – extraído da nota fiscal.
+        params (dict): Dicionário com parâmetros avançados.
+
+    Retorna:
+        tuple: (total_tco2e, detalhes_dict)
+
+    Fatores padrão (IPCC 2006 Cap.3 Tabelas 3.2.1 e 3.2.2):
+        - Densidade diesel: 0,84 kg/L (valor de referência – não IPCC)
+        - PCI diesel: 0,043 TJ/t (IPCC 2006 Cap.1 Tabela 1.2)
+        - CO₂: 74,1 t/TJ (Tabela 3.2.1)
+        - CH₄: 0,0039 t/TJ (Tabela 3.2.2)
+        - N₂O: 0,0039 t/TJ (Tabela 3.2.2)
+
+    GWPs: mesmo do gás (IPCC AR6 2021)
+    """
     densidade = params['densidade_diesel']
     massa_kg = litros_diesel * densidade
     massa_t = massa_kg / 1000
@@ -249,7 +319,7 @@ with st.sidebar:
         """)
 
     # ============================================
-    # PARÂMETROS AVANÇADOS (EDITÁVEIS)
+    # PARÂMETROS AVANÇADOS (EDITÁVEIS) – apenas para especialistas
     # ============================================
     with st.expander("⚙️ Parâmetros avançados (opcional)"):
         st.markdown("Ajuste os valores caso possua dados mais precisos (laudo do fornecedor, fatura de gás, etc.).")
