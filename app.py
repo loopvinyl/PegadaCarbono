@@ -87,7 +87,7 @@ def inicializar_parametros_avancados():
 
             # GWPs (AR6 20 anos)
             'gwp_ch4': 82.5,
-            'gwp_n2o': 273
+            'gwp_n2o': 273.0   # <--- corrigido: float para evitar erro de tipo misto
         }
 
 def resetar_parametros():
@@ -103,7 +103,7 @@ def resetar_parametros():
         'fe_ch4_gas': 0.005,
         'fe_n2o_gas': 0.0001,
         'gwp_ch4': 82.5,
-        'gwp_n2o': 273
+        'gwp_n2o': 273.0      # <--- corrigido
     }
 
 # ============================================
