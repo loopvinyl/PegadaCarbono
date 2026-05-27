@@ -1,7 +1,7 @@
 # =============================================================================
 # Calculadora de Pegada de Carbono
 # =============================================================================
-# Autor: [Seu Nome]
+# Autor: Cassio Luiz Vellani
 # Versão: 1.0
 # Data: 2026-05-27
 # Licença: Todos os direitos reservados (ou outra de sua escolha)
